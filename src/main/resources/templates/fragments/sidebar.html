@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="conversationList">
+    <div class="conversation-list">
+        <a th:each="conv : ${conversations}"
+           th:href="@{/chat/{id}(id=${conv.id})}"
+           class="conversation-item"
+           th:classappend="${conversation != null && conversation.id == conv.id ? 'active' : ''}">
+            <span class="conv-title" th:text="${conv.title}">Chat</span>
+            <span class="conv-provider" th:text="${conv.provider != null ? conv.provider : 'ollama'}">ollama</span>
+            <span class="conv-model" th:text="${conv.model}">model</span>
+            <button class="btn-delete"
+                    th:attr="hx-delete=@{/conversations/{id}(id=${conv.id})}"
+                    hx-target="closest .conversation-item"
+                    hx-swap="outerHTML"
+                    hx-confirm="Delete this conversation?"
+                    onclick="event.preventDefault(); event.stopPropagation();"
+                    title="Delete">&times;</button>
+        </a>
+    </div>
+    <div th:if="${#lists.isEmpty(conversations)}" class="no-conversations">
+        No conversations yet
+    </div>
+</div>
+</body>
+</html>

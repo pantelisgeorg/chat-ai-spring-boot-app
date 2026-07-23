@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:fragment="newMessages">
+    <div class="message user-message">
+        <div class="message-role">You</div>
+        <div class="message-content" th:text="${userMessage}"></div>
+    </div>
+    <div class="message assistant-message">
+        <div class="message-role">Assistant</div>
+        <div class="message-content markdown-body" id="streamTarget">
+            <div class="typing-indicator"><span></span><span></span><span></span></div>
+        </div>
+    </div>
+    <script th:inline="javascript">
+        startStreaming([[${conversationId}]], [[${userMessage}]], [[${model}]]);
+    </script>
+</div>
+</body>
+</html>

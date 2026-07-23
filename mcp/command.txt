@@ -1,0 +1,2 @@
+uv run --script ./pdf_server.py
+uv run --script ./pdf_server.py

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spring AI Chat</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Chats</h2>
+                <div class="sidebar-actions">
+                    <button class="btn-icon" onclick="toggleTheme()" title="Toggle theme">
+                        <span class="theme-icon">&#9790;</span>
+                    </button>
+                    <a th:href="@{/config}" class="btn-icon" title="Settings">&#9881;</a>
+                </div>
+            </div>
+
+            <form th:action="@{/conversations}" method="post" class="new-chat-form">
+                <input type="hidden" name="model" id="selectedModel"
+                       th:value="${conversation != null ? conversation.model : defaultModel}">
+                <input type="hidden" name="provider" id="selectedProvider"
+                       th:value="${defaultProvider != null ? defaultProvider : 'ollama'}">
+                <select id="providerSelect" onchange="switchProvider(this.value)" class="model-select">
+                    <option value="ollama" th:selected="${defaultProvider == null || defaultProvider == 'ollama'}">Ollama</option>
+                    <option value="lmstudio" th:selected="${defaultProvider == 'lmstudio'}">LM Studio</option>
+                    <option value="unsloth" th:selected="${defaultProvider == 'unsloth'}">Unsloth</option>
+                </select>
+                <select id="modelSelect" onchange="document.getElementById('selectedModel').value=this.value" class="model-select">
+                    <option th:each="m : ${models}" th:value="${m}" th:text="${m}"
+                            th:selected="${conversation != null ? m == conversation.model : false}"></option>
+                </select>
+                <button type="submit" class="btn-new-chat">+ New Chat</button>
+            </form>
+
+            <div class="token-usage" id="tokenUsage" th:if="${conversation != null}" style="display:none">
+                <span class="token-usage-label">Tokens</span>
+                <span class="token-usage-value" id="tokenUsageValue">—</span>
+            </div>
+
+            <div id="conversationList" th:fragment="conversationList">
+                <div th:replace="~{fragments/sidebar :: conversationList}"></div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-main">
+            <div th:if="${conversation == null}" class="welcome-screen">
+                <h1>Spring AI Chat</h1>
+                <p>Select a conversation or start a new one</p>
+            </div>
+
+            <div th:if="${conversation != null}" class="chat-container">
+                <div class="chat-header">
+                    <button class="btn-icon sidebar-toggle" onclick="toggleSidebar()">&#9776;</button>
+                    <span class="chat-title" th:text="${conversation.title}">Chat</span>
+                    <span class="chat-provider" th:text="${conversation.provider != null ? conversation.provider : 'ollama'}">ollama</span>
+                    <span class="chat-model" th:text="${conversation.model}">model</span>
+                    <label class="num-ctx-input" title="Context window (tokens). Larger = more memory. Default is set via chat.default-num-ctx.">
+                        <span class="num-ctx-label">ctx</span>
+                        <input type="number" id="numCtxInput" min="512" max="131072" step="512"
+                               th:attr="data-default=${defaultNumCtx}">
+                    </label>
+                    <label class="tools-toggle" title="Enable file tools (model creates files in workspace)">
+                        <input type="checkbox" id="useToolsToggle" onchange="toggleWorkspacePanel()">
+                        <span class="tools-toggle-label">Tools</span>
+                    </label>
+                    <button class="btn-icon" id="workspacePanelBtn" onclick="toggleWorkspacePanel()" title="Workspace files" style="display:none">&#128193;</button>
+                </div>
+
+                <div class="messages-container" id="messagesContainer">
+                    <div th:each="msg : ${messages}" th:classappend="${msg.role.name() == 'USER' ? 'user-message' : 'assistant-message'}" class="message">
+                        <div class="message-role" th:text="${msg.role.name() == 'USER' ? 'You' : 'Assistant'}"></div>
+                        <div class="message-content" th:if="${msg.role.name() == 'USER'}" th:text="${msg.content}"></div>
+                        <div class="message-content markdown-body" th:if="${msg.role.name() == 'ASSISTANT'}" th:utext="${msg.content}"></div>
+                    </div>
+                </div>
+
+                <div id="attachmentPreview" class="attachment-preview" style="display:none;">
+                    <div class="attachment-chips"></div>
+                </div>
+                <div class="input-container">
+                    <form id="chatForm" onsubmit="sendMessage(event)" class="chat-input-form">
+                        <input type="hidden" id="conversationId" th:value="${conversation.id}">
+                        <input type="hidden" id="conversationModel" th:value="${conversation.model}">
+                        <input type="hidden" id="conversationProvider"
+                               th:value="${conversation.provider != null ? conversation.provider : 'ollama'}">
+                        <input type="file" id="fileInput" multiple accept=".txt,.md,.java,.py,.js,.ts,.html,.css,.xml,.json,.yaml,.yml,.properties,.sql,.sh,.csv,.log,.cfg,.conf,.ini,.c,.cpp,.h,.go,.rs,.rb,.php,.kt,.swift,.scala,.gradle,.toml,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="handleFileSelect(this)">
+                        <button type="button" class="btn-attach" onclick="document.getElementById('fileInput').click()" title="Attach files">&#128206;</button>
+                        <textarea id="messageInput" placeholder="Type a message..." rows="1"
+                                  onkeydown="handleKeyDown(event)" autofocus></textarea>
+                        <button type="submit" id="sendBtn" class="btn-send" title="Send">&#10148;</button>
+                        <button type="button" id="stopBtn" class="btn-stop" onclick="stopStreaming()" title="Stop" style="display:none">&#9632;</button>
+                    </form>
+                </div>
+            </div>
+        </main>
+
+        <!-- Workspace File Browser Panel -->
+        <aside class="workspace-panel" id="workspacePanel" style="display:none">
+            <div class="workspace-header">
+                <h3>Workspace</h3>
+                <div style="display:flex;gap:4px;align-items:center;">
+                    <button class="btn-extract" id="extractFilesBtn" onclick="extractFiles()" title="Re-extract files from all assistant messages in this conversation">Extract Files</button>
+                    <button class="btn-icon" onclick="refreshWorkspace()" title="Refresh">&#8635;</button>
+                    <button class="btn-icon" onclick="closeWorkspacePanel()" title="Close panel">&#10005;</button>
+                </div>
+            </div>
+            <div class="workspace-path" id="workspaceBreadcrumb">
+                <span class="breadcrumb-item" onclick="browseWorkspace('')">/</span>
+            </div>
+            <div class="workspace-files" id="workspaceFiles">
+                <div class="workspace-empty">Enable tools and ask the model to create a project</div>
+            </div>
+            <div class="workspace-preview" id="workspacePreview" style="display:none">
+                <div class="preview-header">
+                    <span id="previewFileName"></span>
+                    <div class="preview-actions">
+                        <button class="btn-icon" onclick="downloadWorkspaceFile()" title="Download">&#11015;</button>
+                        <button class="btn-icon" onclick="closePreview()" title="Close">&#10005;</button>
+                    </div>
+                </div>
+                <pre class="preview-content"><code id="previewContent"></code></pre>
+            </div>
+        </aside>
+    </div>
+
+    <script th:src="@{/js/app.js}"></script>
+    <script>
+        // Configure marked to use highlight.js
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            }
+        });
+
+        // Render existing markdown messages on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.assistant-message .markdown-body').forEach(function(el) {
+                el.innerHTML = DOMPurify.sanitize(marked.parse(el.textContent || ''), { ADD_ATTR: ['class'] });
+                addCopyButtons(el);
+            });
+            scrollToBottom();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Spring AI Chat</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <div class="config-container">
+        <div class="config-header">
+            <a th:href="@{/}" class="btn-back">&larr; Back to Chat</a>
+            <h1>Configuration</h1>
+            <button class="btn-icon" onclick="toggleTheme()" title="Toggle theme">
+                <span class="theme-icon">&#9790;</span>
+            </button>
+        </div>
+
+        <div class="config-section">
+            <h2>Ollama Status</h2>
+            <div th:if="${ollamaAvailable}" class="status-ok">&#10003; Ollama is running</div>
+            <div th:unless="${ollamaAvailable}" class="status-error">&#10007; Ollama is not available</div>
+        </div>
+
+        <div class="config-section">
+            <h2>Available Models</h2>
+            <div id="modelList" hx-get="/config/models" hx-trigger="every 10s" th:fragment="modelList">
+                <div class="model-grid">
+                    <div th:each="m : ${models}" class="model-card">
+                        <span class="model-name" th:text="${m}"></span>
+                    </div>
+                </div>
+                <div th:if="${#lists.isEmpty(models)}" class="no-models">
+                    No models found. Pull a model below.
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h2>LM Studio Status</h2>
+            <div th:if="${lmstudioAvailable}" class="status-ok">&#10003; LM Studio is running</div>
+            <div th:unless="${lmstudioAvailable}" class="status-error">&#10007; LM Studio is not available</div>
+        </div>
+
+        <div class="config-section">
+            <h2>LM Studio Models</h2>
+            <div class="model-grid">
+                <div th:each="m : ${lmstudioModels}" class="model-card">
+                    <span class="model-name" th:text="${m}"></span>
+                </div>
+            </div>
+            <div th:if="${#lists.isEmpty(lmstudioModels)}" class="no-models">
+                No LM Studio models found. Load a model in LM Studio.
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h2>Pull Ollama Model</h2>
+            <form class="pull-form" hx-post="/config/pull" hx-target="#pullResult" hx-swap="innerHTML">
+                <input type="text" name="modelName" placeholder="e.g. mistral:latest" class="input-text" required>
+                <button type="submit" class="btn-primary">Pull</button>
+            </form>
+            <div id="pullResult" class="pull-result"></div>
+        </div>
+    </div>
+
+    <script th:src="@{/js/app.js}"></script>
+</body>
+</html>
