@@ -352,6 +352,44 @@ Console logs show which strategy fired:
 
 All file operations are restricted to the workspace directory. The workspace is created automatically on startup.
 
+### MCP PDF Tools (Optional)
+
+Beyond the built-in workspace file tools, the app can connect to an external **MCP (Model Context Protocol)** server that gives models real PDF capabilities: page counts, per-page text extraction, and table extraction as Markdown. This matters for local models in agent mode, where the built-in `read_file` tool only sees raw PDF bytes (garbage) instead of readable page text.
+
+The server is **optional and auto-detected**. `McpClientConfig` probes `http://localhost:8765/mcp` on first tool use and, if reachable, registers the MCP tools as Spring AI tool callbacks. If the server isn't running, the app starts normally -- the PDF tools simply aren't offered. There is no hard dependency.
+
+#### Running the MCP server
+
+From the `mcp/` directory (dependencies are declared inline in the script, so `uv` resolves them automatically -- no venv setup needed):
+
+```bash
+cd mcp
+uv run --script ./pdf_server.py
+```
+
+This serves Streamable-HTTP on `http://127.0.0.1:8765` (endpoint `/mcp`).
+
+#### Available tools
+
+All tools are confined to a workspace (default `./workspace`, override with the `MCP_WORKSPACE` env var). Absolute paths, `..`, and symlinks that resolve outside the workspace are rejected.
+
+| Tool | Description |
+|------|-------------|
+| `pdf_info(path)` | Number of pages in a PDF |
+| `extract_pdf_text(path, page)` | Plain text from a single 1-indexed page |
+| `extract_pdf_tables(path, page)` | Real tables on a page as GitHub-flavored Markdown (prose mis-detected as a table is filtered out) |
+| `read_pdf(path)` | Full text of all pages concatenated |
+| `list_dir(subpath)` | List files and folders in the workspace |
+| `read_file(path)` | Read a UTF-8 text file from the workspace |
+| `write_file(path, content)` | Create or overwrite a UTF-8 text file in the workspace |
+
+#### Configuration
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `spring.ai.mcp.client.streamable-http.connections.local.url` | `http://localhost:8765` | MCP server URL (probed lazily; app starts with or without it) |
+| `MCP_WORKSPACE` (env) | `./workspace` | Root directory the PDF/file tools are confined to |
+
 ## File Attachments
 
 Supported text/code file formats (up to 512KB):
