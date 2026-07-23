@@ -30,7 +30,7 @@ mcp = FastMCP("pdf-tools")
 # "no such file or directory" because pdfplumber resolved it against the
 # server's CWD, not WORKSPACE.
 WORKSPACE = Path(
-    os.environ.get("MCP_WORKSPACE", "/home/george/Desktop/chat_ollama-master/chat_ollama-master/workspace")
+    os.environ.get("MCP_WORKSPACE", Path(__file__).resolve().parent.parent / "workspace")
 ).resolve()
 WORKSPACE.mkdir(parents=True, exist_ok=True)
 
